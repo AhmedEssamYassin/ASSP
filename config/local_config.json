@@ -1,0 +1,6 @@
+{
+  "_comment": "Local dev overrides — this file is gitignored",
+  "lcg": {},
+  "diffieHellman": {},
+  "crypto": {}
+}

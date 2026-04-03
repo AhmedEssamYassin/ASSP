@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OTP Stream Cipher // Terminal</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="terminal-frame">
+        <header class="terminal-header">
+            <div class="header-left">
+                <span class="blink">■</span>
+                <span>OTP_STREAM_CIPHER v1.0.0 // SECURE TRANSMISSION TERMINAL</span>
+            </div>
+            <div class="header-right">
+                <span class="status-dot"></span>
+                <span class="status-text">STANDBY</span>
+            </div>
+        </header>
+
+        <div class="system-bar">
+            <div class="sys-item">LCG: 64-BIT KNUTH</div>
+            <div class="sys-item">DH: 2048-BIT FFDHE</div>
+            <div class="sys-item">KDF: HKDF-SHA256</div>
+            <div class="sys-item">CIPHER: AES-256-GCM</div>
+            <div class="sys-item">AUTH: HMAC-SHA256</div>
+            <div class="sys-item">CHUNK: 10 BYTES</div>
+        </div>
+
+        <main class="main-grid">
+            <section class="module module-sender">
+                <div class="module-header">
+                    <span class="module-label">[SENDER]</span>
+                    <span class="module-id">TX-01</span>
+                </div>
+                <div class="module-body">
+                    <div class="sender-watermark">[ WAITING FOR TX ]</div>
+                    <div class="field-group">
+                        <label for="plaintext">> PLAINTEXT_INPUT</label>
+                        <textarea id="plaintext" rows="4"
+                            spellcheck="false">Hello World! This is a secure message.</textarea>
+                    </div>
+                    <button id="transmitBtn" onclick="startTransmission()">
+                        <span class="btn-label">[ EXECUTE TRANSMISSION ]</span>
+                        <span class="btn-loader" style="display: none;">
+                            <span class="loading-dots">
+                                <span class="dot"></span>
+                                <span class="dot"></span>
+                                <span class="dot"></span>
+                            </span>
+                        </span>
+                    </button>
+                </div>
+            </section>
+
+            <section class="module module-pipe">
+                <div class="module-header">
+                    <span class="module-label">[DATA PIPE]</span>
+                    <span class="module-id">CH-00</span>
+                </div>
+                <div class="module-body">
+                    <div id="pipeVisualizer" class="pipe-visualizer">
+                        <div class="pipe-empty">
+                            <span class="pipe-text">AWAITING TRANSMISSION...</span>
+                        </div>
+                    </div>
+                    <div id="chunkDisplay" class="chunk-display hidden">
+                        <div class="chunk-header">
+                            <span>INDEX</span>
+                            <span>PLAINTEXT</span>
+                            <span>CIPHERTEXT</span>
+                        </div>
+                        <div id="chunkRows" class="chunk-rows"></div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="module module-receiver">
+                <div class="module-header">
+                    <span class="module-label">[RECEIVER]</span>
+                    <span class="module-id">RX-01</span>
+                </div>
+                <div class="module-body">
+                    <div id="receiverOutput" class="receiver-output">
+                        <div class="output-empty">
+                            <span class="output-text">NO DATA RECEIVED</span>
+                        </div>
+                    </div>
+                    <div id="decryptedDisplay" class="decrypted-display hidden">
+                        <div class="decrypted-label">> DECRYPTED_OUTPUT</div>
+                        <div id="decryptedText" class="decrypted-text"></div>
+                    </div>
+                    <div id="verificationDisplay" class="verification-display hidden">
+                        <div id="verificationResult" class="verification-result"></div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <section class="module log-module">
+            <div class="module-header">
+                <span class="module-label">[SYSTEM LOG]</span>
+                <span class="module-id">LOG</span>
+            </div>
+            <div class="module-body">
+                <div class="log-grid">
+                    <div class="log-panel">
+                        <div class="log-panel-header">> TX_LOG</div>
+                        <div id="txLogs" class="log-entries"></div>
+                    </div>
+                    <div class="log-panel">
+                        <div class="log-panel-header">> RX_LOG</div>
+                        <div id="rxLogs" class="log-entries"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <footer class="terminal-footer">
+            <span>COMPUTER SECURITY // CAIRO UNIVERSITY</span>
+            <span id="timestamp"></span>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
