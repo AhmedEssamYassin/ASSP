@@ -1,6 +1,4 @@
 {
-  "_comment": "Local dev overrides — this file is gitignored",
-  "lcg": {},
-  "diffieHellman": {},
+  "_comment": "Local dev overrides \u2014 this file is gitignored",
   "crypto": {}
 }

@@ -1,17 +1,16 @@
 """Pytest configuration and shared fixtures for OTP Stream Cipher."""
 
-import json
 import os
 import sys
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.crypto.lcg import LcgGenerator, loadConfig
-from src.crypto.key_exchange import DiffieHellman
+from src.crypto.csprng import CsprngGenerator
+from src.crypto.config import loadConfig
+from src.crypto.key_exchange import EcdhKeyExchange
 from src.crypto.stream_cipher import StreamCipher
 from src.crypto.seed_encryption import encryptSeed, decryptSeed
-from src.crypto.seed_authentication import generateHmac, verifyHmac
 
 @pytest.fixture
 def config():
@@ -19,31 +18,28 @@ def config():
     return loadConfig()
 
 @pytest.fixture
-def lcgGenerator():
-    """Create a standard LCG generator with known parameters."""
-    return LcgGenerator(seed=12345, modulus=18446744073709551616, multiplier=6364136223846793005, increment=1442695040888963407)
+def csprngGenerator():
+    """Create a standard CSPRNG generator with a known 32-byte seed."""
+    return CsprngGenerator(seedBytes=b"1" * 32)
 
 @pytest.fixture
-def streamCipher(lcgGenerator):
-    """Create a stream cipher with fixed LCG for deterministic testing."""
-    return StreamCipher(lcgGenerator, maxChunkSize=10)
+def streamCipher(csprngGenerator):
+    """Create a stream cipher with fixed CSPRNG for deterministic testing."""
+    return StreamCipher(csprngGenerator, maxChunkSize=10)
 
 @pytest.fixture
-def diffieHellman(config):
-    """Create Diffie-Hellman instance from config."""
-    return DiffieHellman(config["diffieHellman"]["p"], config["diffieHellman"]["g"])
+def ecdhKeyExchange():
+    """Create ECDH instance."""
+    return EcdhKeyExchange()
 
 @pytest.fixture
-def sharedKeyPair(diffieHellman):
-    """Generate a DH key pair and derive shared key for testing."""
-    alicePrivate = diffieHellman.generatePrivate()
-    bobPrivate = diffieHellman.generatePrivate()
+def sharedKeyPair(ecdhKeyExchange):
+    """Generate an ECDH key pair and derive shared key for testing."""
+    alicePrivate, alicePublic = ecdhKeyExchange.generateKeypair()
+    bobPrivate, bobPublic = ecdhKeyExchange.generateKeypair()
 
-    alicePublic = diffieHellman.generatePublic(alicePrivate)
-    bobPublic = diffieHellman.generatePublic(bobPrivate)
-
-    aliceShared = diffieHellman.deriveSharedKey(bobPublic, alicePrivate)
-    bobShared = diffieHellman.deriveSharedKey(alicePublic, bobPrivate)
+    aliceShared = ecdhKeyExchange.deriveSharedKey(alicePrivate, bobPublic)
+    bobShared = ecdhKeyExchange.deriveSharedKey(bobPrivate, alicePublic)
 
     return {
         "aliceShared": aliceShared,

@@ -4,76 +4,57 @@ import multiprocessing
 import os
 import logging
 
-from src.crypto.lcg import loadConfig, LcgGenerator
-from src.crypto.key_exchange import DiffieHellman
+from src.crypto.config import loadConfig
+from src.crypto.csprng import CsprngGenerator
+from src.crypto.key_exchange import EcdhKeyExchange
 from src.crypto.seed_encryption import encryptSeed, decryptSeed
-from src.crypto.seed_authentication import generateHmac, verifyHmac
 from src.crypto.stream_cipher import StreamCipher
-from src.crypto.rsa_authentication import (
-    deserializeRsaPrivateKey,
-    deserializeRsaPublicKey,
+from src.crypto.ed25519_authentication import (
+    deserializePrivateKey,
+    deserializePublicKey,
     signPayload,
     verifySignature,
 )
 
 logger = logging.getLogger(__name__)
 
-
-def intToBytes(intVal):
-    """Convert integer to bytes for signing."""
-    return intVal.to_bytes((intVal.bit_length() + 7) // 8, byteorder="big")
-
-def intToBytesFixed(intVal, length):
-    """Convert integer to fixed-length bytes."""
-    return intVal.to_bytes(length, byteorder="big")
-
-def bytesToInt(byteVal):
-    """Convert bytes back to integer."""
-    return int.from_bytes(byteVal, byteorder="big")
-
-def senderProcess(pipeConn, plaintext, config, senderRsaPrivatePem, receiverRsaPublicPem, resultQueue):
-    """Sender process: performs RSA-signed DH key exchange, encrypts seed, sends ciphertext chunks."""
+def senderProcess(pipeConn, plaintext, config, senderEd25519PrivatePem, receiverEd25519PublicPem, resultQueue):
+    """Sender process: performs Ed25519-signed X25519 key exchange, encrypts seed, sends ciphertext chunks."""
     logger.info("=== SENDER PROCESS STARTED ===")
 
-    senderRsaPrivate = deserializeRsaPrivateKey(senderRsaPrivatePem)
-    receiverRsaPublic = deserializeRsaPublicKey(receiverRsaPublicPem)
+    senderEd25519Private = deserializePrivateKey(senderEd25519PrivatePem)
+    receiverEd25519Public = deserializePublicKey(receiverEd25519PublicPem)
 
-    dhParams = config["diffieHellman"]
-    dh = DiffieHellman(dhParams["p"], dhParams["g"])
+    ecdh = EcdhKeyExchange()
+    senderPrivate, senderPublic = ecdh.generateKeypair()
 
-    senderPrivate = dh.generatePrivate()
-    senderPublic = dh.generatePublic(senderPrivate)
+    senderPublicBytes = ecdh.serializePublicKey(senderPublic)
+    senderSignature = signPayload(senderPublicBytes, senderEd25519Private)
 
-    senderPublicBytes = intToBytesFixed(senderPublic, 256)
-    senderSignature = signPayload(senderPublicBytes, senderRsaPrivate)
-
-    pipeConn.send((senderPublic, senderSignature))
+    pipeConn.send((senderPublicBytes, senderSignature))
     logger.info("Sender sent signed public key")
 
-    receiverPublic, receiverSignature = pipeConn.recv()
+    receiverPublicBytes, receiverSignature = pipeConn.recv()
     logger.info("Sender received receiver public key")
 
-    receiverPublicBytes = intToBytesFixed(receiverPublic, 256)
-    verifySignature(receiverPublicBytes, receiverSignature, receiverRsaPublic)
+    verifySignature(receiverPublicBytes, receiverSignature, receiverEd25519Public)
     logger.info("Sender verified receiver public key signature")
 
-    sharedKey = dh.deriveSharedKey(receiverPublic, senderPrivate)
+    receiverPublic = ecdh.deserializePublicKey(receiverPublicBytes)
+    sharedKey = ecdh.deriveSharedKey(senderPrivate, receiverPublic)
     logger.info("Sender derived shared key")
 
-    seed = int.from_bytes(os.urandom(8), byteorder="big")
-    logger.info("Generated random seed")
+    seedBytes = os.urandom(32)
+    logger.info("Generated random 32-byte seed")
 
-    nonce, encryptedSeed = encryptSeed(seed, sharedKey)
+    nonce, encryptedSeed = encryptSeed(seedBytes, sharedKey)
 
     vault = nonce + encryptedSeed
-    vaultHmac = generateHmac(vault, sharedKey)
-    payload = vaultHmac + vault
-    pipeConn.send(payload)
-    logger.info("Sender transmitted encrypted seed payload")
+    pipeConn.send(vault)
+    logger.info("Sender transmitted encrypted seed vault")
 
-    lcgParams = config["lcg"]
-    lcg = LcgGenerator(seed, lcgParams["m"], lcgParams["a"], lcgParams["c"])
-    cipher = StreamCipher(lcg, config["crypto"]["maxChunkSize"])
+    csprng = CsprngGenerator(seedBytes)
+    cipher = StreamCipher(csprng, config["crypto"]["maxChunkSize"])
 
     logger.info("Encrypting plaintext")
     cipherChunks = cipher.encrypt(plaintext)
@@ -87,57 +68,47 @@ def senderProcess(pipeConn, plaintext, config, senderRsaPrivatePem, receiverRsaP
     logger.info("=== SENDER PROCESS COMPLETED ===")
     pipeConn.close()
 
-
-def receiverProcess(pipeConn, config, receiverRsaPrivatePem, senderRsaPublicPem, resultQueue):
-    """Receiver process: verifies RSA-signed DH keys, receives encrypted seed, verifies HMAC, decrypts ciphertext."""
+def receiverProcess(pipeConn, config, receiverEd25519PrivatePem, senderEd25519PublicPem, resultQueue):
+    """Receiver process: verifies Ed25519-signed X25519 keys, decrypts ciphertext."""
     logger.info("=== RECEIVER PROCESS STARTED ===")
 
-    receiverRsaPrivate = deserializeRsaPrivateKey(receiverRsaPrivatePem)
-    senderRsaPublic = deserializeRsaPublicKey(senderRsaPublicPem)
+    receiverEd25519Private = deserializePrivateKey(receiverEd25519PrivatePem)
+    senderEd25519Public = deserializePublicKey(senderEd25519PublicPem)
 
-    dhParams = config["diffieHellman"]
-    dh = DiffieHellman(dhParams["p"], dhParams["g"])
+    ecdh = EcdhKeyExchange()
+    receiverPrivate, receiverPublic = ecdh.generateKeypair()
 
-    receiverPrivate = dh.generatePrivate()
-    receiverPublic = dh.generatePublic(receiverPrivate)
-
-    senderPublic, senderSignature = pipeConn.recv()
+    senderPublicBytes, senderSignature = pipeConn.recv()
     logger.info("Receiver received sender public key")
 
-    senderPublicBytes = intToBytesFixed(senderPublic, 256)
-    verifySignature(senderPublicBytes, senderSignature, senderRsaPublic)
+    verifySignature(senderPublicBytes, senderSignature, senderEd25519Public)
     logger.info("Receiver verified sender public key signature")
 
-    receiverPublicBytes = intToBytesFixed(receiverPublic, 256)
-    receiverSignature = signPayload(receiverPublicBytes, receiverRsaPrivate)
+    receiverPublicBytes = ecdh.serializePublicKey(receiverPublic)
+    receiverSignature = signPayload(receiverPublicBytes, receiverEd25519Private)
 
-    pipeConn.send((receiverPublic, receiverSignature))
+    pipeConn.send((receiverPublicBytes, receiverSignature))
     logger.info("Receiver sent signed public key")
 
-    sharedKey = dh.deriveSharedKey(senderPublic, receiverPrivate)
+    senderPublic = ecdh.deserializePublicKey(senderPublicBytes)
+    sharedKey = ecdh.deriveSharedKey(receiverPrivate, senderPublic)
     logger.info("Receiver derived shared key")
 
-    payload = pipeConn.recv()
-    receivedHmac = payload[:32]
-    vault = payload[32:]
-
-    try:
-        verifyHmac(vault, sharedKey, receivedHmac)
-    except Exception:
-        logger.error("Receiver: Aborting - HMAC verification failed")
-        resultQueue.put({"decryptedText": "", "success": False, "error": "HMAC verification failed"})
-        pipeConn.close()
-        return
-
+    vault = pipeConn.recv()
     nonce = vault[:12]
     encryptedSeed = vault[12:]
 
-    seed = decryptSeed(nonce, encryptedSeed, sharedKey)
-    logger.info("Receiver recovered seed")
+    try:
+        seedBytes = decryptSeed(nonce, encryptedSeed, sharedKey)
+        logger.info("Receiver recovered seed")
+    except Exception:
+        logger.error("Receiver: Aborting - AES-GCM tag verification failed")
+        resultQueue.put({"decryptedText": "", "success": False, "error": "AES-GCM tag verification failed"})
+        pipeConn.close()
+        return
 
-    lcgParams = config["lcg"]
-    lcg = LcgGenerator(seed, lcgParams["m"], lcgParams["a"], lcgParams["c"])
-    cipher = StreamCipher(lcg, config["crypto"]["maxChunkSize"])
+    csprng = CsprngGenerator(seedBytes)
+    cipher = StreamCipher(csprng, config["crypto"]["maxChunkSize"])
 
     cipherChunks = []
     while True:
@@ -159,34 +130,34 @@ def receiverProcess(pipeConn, config, receiverRsaPrivatePem, senderRsaPublicPem,
 
 
 def runCommunication(plaintext, config=None):
-    """Run sender and receiver processes in parallel with RSA-signed DH key exchange."""
-    from src.crypto.rsa_authentication import (
-        generateRsaKeypair,
-        serializeRsaPrivateKey,
-        serializeRsaPublicKey,
+    """Run sender and receiver processes in parallel with Ed25519-signed X25519 key exchange."""
+    from src.crypto.ed25519_authentication import (
+        generateSigningKeypair,
+        serializePrivateKey,
+        serializePublicKey,
     )
 
     if config is None:
         config = loadConfig()
 
-    senderRsaPrivate, senderRsaPublic = generateRsaKeypair()
-    receiverRsaPrivate, receiverRsaPublic = generateRsaKeypair()
+    senderEd25519Private, senderEd25519Public = generateSigningKeypair()
+    receiverEd25519Private, receiverEd25519Public = generateSigningKeypair()
 
-    senderRsaPrivatePem = serializeRsaPrivateKey(senderRsaPrivate)
-    receiverRsaPrivatePem = serializeRsaPrivateKey(receiverRsaPrivate)
-    senderRsaPublicPem = serializeRsaPublicKey(senderRsaPublic)
-    receiverRsaPublicPem = serializeRsaPublicKey(receiverRsaPublic)
+    senderEd25519PrivatePem = serializePrivateKey(senderEd25519Private)
+    receiverEd25519PrivatePem = serializePrivateKey(receiverEd25519Private)
+    senderEd25519PublicPem = serializePublicKey(senderEd25519Public)
+    receiverEd25519PublicPem = serializePublicKey(receiverEd25519Public)
 
     parentConn, childConn = multiprocessing.Pipe()
     resultQueue = multiprocessing.Queue()
 
     sender = multiprocessing.Process(
         target=senderProcess,
-        args=(parentConn, plaintext, config, senderRsaPrivatePem, receiverRsaPublicPem, resultQueue),
+        args=(parentConn, plaintext, config, senderEd25519PrivatePem, receiverEd25519PublicPem, resultQueue),
     )
     receiver = multiprocessing.Process(
         target=receiverProcess,
-        args=(childConn, config, receiverRsaPrivatePem, senderRsaPublicPem, resultQueue),
+        args=(childConn, config, receiverEd25519PrivatePem, senderEd25519PublicPem, resultQueue),
     )
 
     receiver.start()

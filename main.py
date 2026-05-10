@@ -10,13 +10,12 @@ from src.communication.pipeline import runCommunication
 
 logger = logging.getLogger(__name__)
 
-
 class ApiBridge:
     """Bridge class exposing backend functions to the pywebview frontend."""
 
     def __init__(self):
         """Initialize the API bridge with configuration."""
-        from src.crypto.lcg import loadConfig
+        from src.crypto.config import loadConfig
 
         self.config = loadConfig()
         self.executor = ThreadPoolExecutor(max_workers=1)
@@ -35,12 +34,13 @@ class ApiBridge:
 
                 formattedChunks = []
                 maxChunkSize = self.config["crypto"]["maxChunkSize"]
+                plaintextBytes = plaintext.encode("utf-8")
                 for i, chunk in enumerate(cipherChunks):
                     startIdx = i * maxChunkSize
-                    endIdx = min(startIdx + maxChunkSize, len(plaintext))
+                    endIdx = min(startIdx + maxChunkSize, len(plaintextBytes))
                     formattedChunks.append({
                         "index": i + 1,
-                        "plain": plaintext[startIdx:endIdx],
+                        "plain": plaintextBytes[startIdx:endIdx].decode("utf-8", errors="replace"),
                         "cipher": chunk,
                     })
 
@@ -64,11 +64,9 @@ class ApiBridge:
         """Retrieve accumulated logs."""
         return self.logs
 
-
 def setupEnvironment():
     """Set up environment variables and paths."""
     os.environ["PYWEBVIEW_LOG_LEVEL"] = "error"
-
 
 def main():
     """Initialize and run the pywebview application."""

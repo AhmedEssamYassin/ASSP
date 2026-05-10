@@ -1,25 +1,24 @@
-"""Stream Cipher module implementing OTP-style XOR encryption with LCG keystream."""
+"""Stream Cipher module implementing OTP-style XOR encryption with CSPRNG keystream."""
 
 import logging
 
 logger = logging.getLogger(__name__)
 
-
 class StreamCipher:
-    """Stream cipher that XORs plaintext/ciphertext with LCG-generated keystream.
+    """Stream cipher that XORs plaintext/ciphertext with CSPRNG-generated keystream.
 
     Operates on raw UTF-8 bytes to safely handle multi-byte Unicode characters
     (Arabic, Japanese, Emoji, etc.) without truncation or overflow.
     """
 
-    def __init__(self, lcg, maxChunkSize=10):
-        """Initialize cipher with an LCG generator instance.
+    def __init__(self, csprng, maxChunkSize=10):
+        """Initialize cipher with a CSPRNG generator instance.
 
         Args:
-            lcg: An LcgGenerator instance (dependency injection)
+            csprng: A CsprngGenerator instance (dependency injection)
             maxChunkSize: Maximum bytes per chunk (default 10)
         """
-        self.lcg = lcg
+        self.csprng = csprng
         self.maxChunkSize = maxChunkSize
 
     def encrypt(self, plaintext):
@@ -30,7 +29,7 @@ class StreamCipher:
         for chunk in chunks:
             cipherBytes = []
             for byteVal in chunk:
-                keyByte = self.lcg.getNextByte()
+                keyByte = self.csprng.getNextByte()
                 cipherByte = byteVal ^ keyByte
                 cipherBytes.append(cipherByte)
             hexChunk = bytes(cipherBytes).hex()
@@ -44,7 +43,7 @@ class StreamCipher:
         for chunkHex in cipherChunks:
             cipherBytes = bytes.fromhex(chunkHex)
             for cipherByte in cipherBytes:
-                keyByte = self.lcg.getNextByte()
+                keyByte = self.csprng.getNextByte()
                 plainByte = cipherByte ^ keyByte
                 allBytes.append(plainByte)
             logger.info("Decrypt chunk: %s -> %s", chunkHex, bytes(allBytes[-len(cipherBytes):]).hex())
@@ -53,3 +52,4 @@ class StreamCipher:
     def _splitIntoChunks(self, data):
         """Split byte data into chunks of maxChunkSize bytes."""
         return [data[i:i + self.maxChunkSize] for i in range(0, len(data), self.maxChunkSize)]
+
