@@ -47,13 +47,15 @@ def senderProcess(pipeConn, plaintext, config, senderEd25519PrivatePem, receiver
     seedBytes = os.urandom(32)
     logger.info("Generated random 32-byte seed")
 
-    nonce, encryptedSeed = encryptSeed(seedBytes, sharedKey)
-
-    vault = nonce + encryptedSeed
-    pipeConn.send(vault)
-    logger.info("Sender transmitted encrypted seed vault")
+    gcmNonce, encryptedSeed = encryptSeed(seedBytes, sharedKey)
 
     csprng = CsprngGenerator(seedBytes)
+    csprngNonce = csprng.getNonce()
+
+    vault = gcmNonce + encryptedSeed + csprngNonce
+    pipeConn.send(vault)
+    logger.info("Sender transmitted encrypted seed vault and CSPRNG nonce")
+
     cipher = StreamCipher(csprng, config["crypto"]["maxChunkSize"])
 
     logger.info("Encrypting plaintext")
@@ -95,11 +97,12 @@ def receiverProcess(pipeConn, config, receiverEd25519PrivatePem, senderEd25519Pu
     logger.info("Receiver derived shared key")
 
     vault = pipeConn.recv()
-    nonce = vault[:12]
-    encryptedSeed = vault[12:]
+    gcmNonce = vault[:12]
+    encryptedSeed = vault[12:60]
+    csprngNonce = vault[60:]
 
     try:
-        seedBytes = decryptSeed(nonce, encryptedSeed, sharedKey)
+        seedBytes = decryptSeed(gcmNonce, encryptedSeed, sharedKey)
         logger.info("Receiver recovered seed")
     except Exception:
         logger.error("Receiver: Aborting - AES-GCM tag verification failed")
@@ -107,7 +110,7 @@ def receiverProcess(pipeConn, config, receiverEd25519PrivatePem, senderEd25519Pu
         pipeConn.close()
         return
 
-    csprng = CsprngGenerator(seedBytes)
+    csprng = CsprngGenerator(seedBytes, nonceBytes=csprngNonce)
     cipher = StreamCipher(csprng, config["crypto"]["maxChunkSize"])
 
     cipherChunks = []

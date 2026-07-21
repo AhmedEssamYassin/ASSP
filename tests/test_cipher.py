@@ -17,9 +17,9 @@ class TestCsprngGenerator:
     """Tests for CSPRNG (AES-CTR)."""
 
     def testCsprngDeterministic(self):
-        """Verify CSPRNG produces deterministic output with same seed."""
+        """Verify CSPRNG produces deterministic output with same seed and nonce."""
         gen1 = CsprngGenerator(seedBytes=b"A" * 32)
-        gen2 = CsprngGenerator(seedBytes=b"A" * 32)
+        gen2 = CsprngGenerator(seedBytes=b"A" * 32, nonceBytes=gen1.getNonce())
 
         for i in range(100):
             assert gen1.getNextByte() == gen2.getNextByte()
@@ -43,7 +43,7 @@ class TestStreamCipher:
     def testStreamCipherRoundTrip(self):
         """Verify XOR(XOR(plaintext, KEY), KEY) == plaintext."""
         gen1 = CsprngGenerator(seedBytes=b"C" * 32)
-        gen2 = CsprngGenerator(seedBytes=b"C" * 32)
+        gen2 = CsprngGenerator(seedBytes=b"C" * 32, nonceBytes=gen1.getNonce())
         cipher1 = StreamCipher(gen1, maxChunkSize=10)
         cipher2 = StreamCipher(gen2, maxChunkSize=10)
 
@@ -69,7 +69,7 @@ class TestStreamCipher:
     def testUnicodeSupport(self):
         """Verify multi-byte Unicode characters encrypt/decrypt correctly."""
         gen1 = CsprngGenerator(seedBytes=b"U" * 32)
-        gen2 = CsprngGenerator(seedBytes=b"U" * 32)
+        gen2 = CsprngGenerator(seedBytes=b"U" * 32, nonceBytes=gen1.getNonce())
         cipher1 = StreamCipher(gen1, maxChunkSize=10)
         cipher2 = StreamCipher(gen2, maxChunkSize=10)
 
