@@ -2,6 +2,7 @@
 
 import logging
 import os
+from collections import deque
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,7 @@ class CsprngGenerator:
         
         cipher = Cipher(algorithms.AES(self.key), modes.CTR(self.nonce))
         self.encryptor = cipher.encryptor()
+        self._buffer = deque()
 
     def getNonce(self):
         """Return the 16-byte nonce used by the CSPRNG."""
@@ -33,5 +35,6 @@ class CsprngGenerator:
 
     def getNextByte(self):
         """Generate and return the next pseudo-random byte."""
-        # Encrypt a single null byte to extract one byte of the keystream
-        return self.encryptor.update(b"\x00")[0]
+        if not self._buffer:
+            self._buffer = deque(self.encryptor.update(b"\x00" * 4096))
+        return self._buffer.popleft()

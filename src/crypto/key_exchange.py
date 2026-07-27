@@ -1,7 +1,7 @@
 """Curve25519 (X25519) key exchange module with HKDF derivation."""
 
 import logging
-from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
+from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives import serialization
@@ -27,10 +27,9 @@ class EcdhKeyExchange:
 
     def deserializePublicKey(self, publicBytes):
         """Deserialize public key from raw bytes (32 bytes)."""
-        from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PublicKey
         return X25519PublicKey.from_public_bytes(publicBytes)
 
-    def deriveSharedKey(self, ownPrivate, otherPublic):
+    def deriveSharedKey(self, ownPrivate, otherPublic, salt=None):
         """Derive shared secret using HKDF (RFC 5869) with SHA-256."""
         sharedSecret = ownPrivate.exchange(otherPublic)
         logger.info("Derived X25519 shared secret")
@@ -38,8 +37,8 @@ class EcdhKeyExchange:
         hkdf = HKDF(
             algorithm=hashes.SHA256(),
             length=32,
-            salt=None,
-            info=b"otp-stream-cipher-v1",
+            salt=salt,
+            info=b"assp-stream-cipher-v1",
         )
         sharedKey = hkdf.derive(sharedSecret)
         logger.info("Derived shared key via HKDF")

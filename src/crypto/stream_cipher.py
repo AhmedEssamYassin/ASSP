@@ -1,4 +1,4 @@
-"""Stream Cipher module implementing OTP-style XOR encryption with CSPRNG keystream."""
+"""Stream Cipher module implementing XOR encryption with CSPRNG keystream."""
 
 import logging
 
@@ -7,8 +7,8 @@ logger = logging.getLogger(__name__)
 class StreamCipher:
     """Stream cipher that XORs plaintext/ciphertext with CSPRNG-generated keystream.
 
-    Operates on raw UTF-8 bytes to safely handle multi-byte Unicode characters
-    (Arabic, Japanese, Emoji, etc.) without truncation or overflow.
+    Operates on raw bytes to safely handle any binary data (images, PDFs, 
+    executables) without being restricted to UTF-8 text.
     """
 
     def __init__(self, csprng, maxChunkSize=10):
@@ -21,24 +21,24 @@ class StreamCipher:
         self.csprng = csprng
         self.maxChunkSize = maxChunkSize
 
-    def encrypt(self, plaintext):
-        """Encrypt plaintext by XORing UTF-8 bytes with keystream."""
-        plaintextBytes = plaintext.encode("utf-8")
-        chunks = self._splitIntoChunks(plaintextBytes)
-        cipherChunks = []
-        for chunk in chunks:
+
+    def encryptStream(self, data):
+        """Encrypt data as a generator, yielding one hex-encoded chunk at a time.
+
+        This allows the caller to transmit each chunk immediately after encryption
+        rather than buffering the entire ciphertext in memory first.
+        """
+        for chunk in self._splitIntoChunks(data):
             cipherBytes = []
             for byteVal in chunk:
                 keyByte = self.csprng.getNextByte()
-                cipherByte = byteVal ^ keyByte
-                cipherBytes.append(cipherByte)
+                cipherBytes.append(byteVal ^ keyByte)
             hexChunk = bytes(cipherBytes).hex()
-            cipherChunks.append(hexChunk)
-            logger.info("Encrypt chunk: %s -> %s", chunk.hex(), hexChunk)
-        return cipherChunks
+            logger.debug("Encrypt chunk (%d bytes)", len(hexChunk) // 2)
+            yield hexChunk
 
     def decrypt(self, cipherChunks):
-        """Decrypt ciphertext chunks back to plaintext via UTF-8 decode."""
+        """Decrypt ciphertext chunks back to raw bytes."""
         allBytes = bytearray()
         for chunkHex in cipherChunks:
             cipherBytes = bytes.fromhex(chunkHex)
@@ -46,10 +46,11 @@ class StreamCipher:
                 keyByte = self.csprng.getNextByte()
                 plainByte = cipherByte ^ keyByte
                 allBytes.append(plainByte)
-            logger.info("Decrypt chunk: %s -> %s", chunkHex, bytes(allBytes[-len(cipherBytes):]).hex())
-        return allBytes.decode("utf-8")
+            logger.debug("Decrypt chunk received (%d bytes)", len(cipherBytes))
+        return bytes(allBytes)
 
     def _splitIntoChunks(self, data):
         """Split byte data into chunks of maxChunkSize bytes."""
-        return [data[i:i + self.maxChunkSize] for i in range(0, len(data), self.maxChunkSize)]
+        for i in range(0, len(data), self.maxChunkSize):
+            yield data[i:i + self.maxChunkSize]
 

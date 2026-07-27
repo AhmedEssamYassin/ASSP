@@ -1,1 +1,1 @@
-"""Crypto package for OTP Stream Cipher."""
+"""Crypto package for Authenticated Secure Stream Protocol."""

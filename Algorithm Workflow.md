@@ -1,6 +1,5 @@
-# Project Workflow & Algorithm Documentation: OTP Stream Cipher
+# Project Workflow & Algorithm Documentation: Authenticated Secure Stream Protocol
 
----
 
 ## Before We Start: What Are We Actually Building?
 
@@ -24,11 +23,14 @@ Pre-session (once)   │ Ed25519 Key Gen    │ Identity                  │ Pe
 Handshake (once)     │ X25519 (ECDH)      │ The shared secret         │ Key agreement without
                      │                    │                           │ transmitting the secret
                      ├────────────────────┼───────────────────────────┼──────────────────────────
-                     │ Ed25519 Signatures │ The X25519 public values  │ Identity verification —
-                     │                    │                           │ proves who sent them
+                     │ Ed25519 Signatures │ The X25519 public values  │ Protects against network
+                     │                    │                           │ tampering during transit
                      ├────────────────────┼───────────────────────────┼──────────────────────────
                      │ HKDF               │ The raw shared secret     │ Converts it into a
                      │                    │                           │ proper 32-byte AES key
+                     ├────────────────────┼───────────────────────────┼──────────────────────────
+                     │ SAS (Short Auth    │ The shared secret         │ Out-of-band MITM
+                     │ String)            │                           │ detection mechanism
 ─────────────────────┼────────────────────┼───────────────────────────┼──────────────────────────
 Seed exchange (once) │ AES-256-GCM        │ The Seed value itself     │ Confidentiality & Integrity
                      │                    │                           │ — encrypts and authenticates
@@ -76,11 +78,12 @@ Instead of true randomness, we use a **Cryptographically Secure Pseudorandom Num
 
 **How Synchronization Works:**
 To produce identical keystreams, Alice and Bob do not need to send the entire infinite stream of random bytes to each other. They only need to share a single starting point. 
-1. Alice uses her operating system's true random number generator (`os.urandom(32)`) to create a perfectly random 256-bit (32-byte) **Seed** (this acts as the AES key). 
-2. She generates a highly secure 16-byte random **Nonce** (`os.urandom(16)`) to act as the initialization vector for AES-CTR. Even though the Seed is fully ephemeral and unique per session, generating a random nonce is standard cryptographic "Defense in Depth" to definitively prevent the catastrophic "Two-Time Pad" vulnerability if a key is ever reused.
+1. Alice uses her operating system's true random number generator (`os.urandom(32)`) to create a perfectly random 256-bit (32-byte) **Seed** (this acts as the AES key).
+2. She instantiates `CsprngGenerator(seedBytes)`. The constructor internally generates a highly secure 16-byte random **Nonce** via `os.urandom(16)` to act as the initialization vector for AES-CTR. Even though the Seed is fully ephemeral and unique per session, generating a random nonce is standard cryptographic "Defense in Depth" to definitively prevent the catastrophic "Two-Time Pad" vulnerability if a key is ever reused.
 3. She securely transmits both this Seed and the public Nonce to Bob (we'll explain how in the next section).
 4. Once Bob receives them, both Alice and Bob load the Seed as the key and the Nonce as the initialization vector into their local AES-CTR engines.
-5. They begin encrypting a sequence of null bytes. 
+5. They begin encrypting a sequence of null bytes.
+
 
 Because AES is a deterministic algorithm, giving it the exact same 32-byte key (`Seed`) and the exact same 16-byte nonce (`csprngNonce`) guarantees that both Alice and Bob's machines will produce the exact same sequence of pseudo-random bytes in perfect lockstep, forever.
 
@@ -159,23 +162,24 @@ X25519 completely defeats a *passive* eavesdropper. But an *active* attacker (Ma
 
 Mallory then computes two separate shared secrets — one with Alice and one with Bob. Alice and Bob think they are talking to each other, but Mallory is sitting in the middle, decrypting and re-encrypting every message. 
 
-**The Solution — Ed25519 Digital Signatures:**
+**The Solution — Ed25519 Signatures + Short Authentication Strings (SAS):**
 
-To prevent this, we must prove *identity*. Alice and Bob must prove that the X25519 keys they are exchanging actually belong to them.
+To prevent this, we must prove *identity*. 
 
-Long before the chat begins, Alice and Bob generate permanent identity keys using **Ed25519**, an Elliptic Curve Digital Signature Algorithm (EdDSA) operating on the Edwards25519 curve. 
+First, Alice and Bob generate ephemeral identity keys using **Ed25519**, an Elliptic Curve Digital Signature Algorithm (EdDSA). They use their private Ed25519 keys to sign their X25519 public keys. This proves that whoever sent the payload controls the Ed25519 key.
 
-**The Need for Out-of-Band Authentication:**
-While Public Keys are mathematically safe to share over an open network—because they contain no secret information—the core requirement is **Authentication**. 
+But since the Ed25519 keys are also sent over the network, Mallory could replace *both* the X25519 keys and the Ed25519 keys with her own! 
 
-If Alice simply transmits her Public Key over the internet, a Man-in-the-Middle (Mallory) could intercept the transmission, substitute it with her own Public Key, and forward it to Bob while claiming to be Alice. Bob would unknowingly encrypt all subsequent messages using Mallory's key, allowing her to intercept and read the conversation.
+**The Need for Out-of-Band Authentication (SAS):**
+Because Mallory must establish two separate shared secrets to sit in the middle (one with Alice, one with Bob), Alice and Bob will inherently end up with different Shared Secrets.
 
-To guarantee that a Public Key legitimately belongs to its claimed owner, Alice and Bob must initially exchange their keys (or verify short cryptographic "fingerprints" of those keys) through a trusted "out-of-band" channel. Common real-world examples include:
-1. **In-Person Verification:** Scanning a QR code on a physical device (e.g., Signal or WhatsApp's "verify safety numbers" feature).
-2. **Alternative Channels:** Verifying the key fingerprint over a trusted, voice-authenticated phone call.
-3. **Public Key Infrastructure (PKI):** Relying on a trusted centralized registry (e.g., how HTTPS relies on Certificate Authorities to vouch for domain ownership). 
+We take the derived shared secret and pass it through a function to generate a **Short Authentication String (SAS)** — e.g., four random words like "APPLE BIRD CAR DELTA".
+Both Alice and Bob's apps display their SAS words. They then communicate over an out-of-band channel (like a quick phone call) and compare the words. 
 
-Once both parties possess each other's *verified* Public Keys, they can securely authenticate all future communications over completely untrusted networks.
+- If the words **match**, it is mathematically proven that no MITM intervened, because a MITM forces the shared secrets to diverge.
+- If they **don't match**, a MITM is present, and they abort the connection.
+
+Once the SAS is verified, the Ed25519 public key of the other party is saved (Trust On First Use, or TOFU). On future connections, the app just checks if the Ed25519 key matches the trusted, saved copy, allowing them to skip the verbal SAS check. This is exactly how the "Safety Numbers" feature works in end-to-end encrypted apps like Signal and WhatsApp.
 
 **How the Ed25519 Trapdoor Works:**
 Like X25519, Ed25519 relies on the ECDLP trapdoor, but it uses it for proving knowledge rather than exchanging secrets.
@@ -186,6 +190,85 @@ When Alice wants to sign her X25519 public key `A`, she uses her Ed25519 Private
 If Mallory tries to substitute `A` with `M`, she must also generate a new signature for `M`. But she doesn't have Alice's Private Key. Because the ECDLP trapdoor prevents her from deriving the Private Key from the Public Key, she cannot forge the signature. 
 
 When Bob receives `A` and the signature, he verifies it against Alice's pre-loaded Ed25519 Public Key. If it matches, he knows with mathematical certainty that `A` was generated by Alice and was not modified in transit.
+
+**Mental Model vs. What Python Actually Does**
+
+It helps to correct a common misconception about how this works under the hood, because the reality is more elegant than the classic textbook description.
+
+*1. Hashing the Message*
+
+You might expect: Alice simply hashes the message (`A`).
+
+What `privateKey.sign(A)` actually does: It does hash your message using SHA-512, but not the message alone. It securely mixes the message together with your public key and a unique session nonce to create an advanced, context-bound fingerprint. This prevents a class of attacks where valid signatures on one message could be recycled for another.
+
+*2. Applying the Private Key*
+
+You might expect: Alice encrypts the hash with her private key to produce the signature.
+
+What actually happens: Nothing is encrypted. Instead, Ed25519 uses your private key to **solve a math equation**. Your private key is a secret scalar (a big integer, call it $a$). The algorithm multiplies and adds $a$ together with the hash from Step 1 to produce a final number $S$. This number $S$, paired with a commitment point $R$, is your digital signature. The output of `.sign()` is the pair $(R, S)$.
+
+*3. Verification — The Algebraic Mousetrap*
+
+You might expect: The receiver decrypts the signature with Alice's public key, recovers the hash, hashes the message themselves, and compares.
+
+What actually happens: **The receiver cannot decrypt the signature, because nothing was ever encrypted.** Instead, they plug three things they already hold into a public mathematical formula, and check whether the formula balances.
+
+To see exactly what the receiver has in their hands when the data arrives over the network, let's establish the variables:
+
+- **The Message ($M$)**: The data Alice sent (her X25519 public key, in our case).
+- **Alice's Public Key ($P$)**: Her mathematical identity. Generated by multiplying her secret private key ($a$) by the curve's base point ($G$): $P = a \cdot G$.
+- **The Signature $(R, S)$**: The two numbers `.sign()` produced.
+  - $R$ is the public **commitment point** ($R = r \cdot G$, where $r$ is a secret random scalar generated during signing).
+  - $S$ is the **mathematical proof scalar** ($S = r + h \cdot a$, where $h$ is the SHA-512 hash of $R$, $P$, and $M$ combined).
+
+Here is the exact three-step process the receiver's software performs:
+
+**Step 1 — Recreate the Challenge**
+
+The receiver generates the same fingerprint (the challenge scalar $h$) that Alice's software did during signing. They hash the commitment point, the public key, and the message together:
+
+$$h = \text{SHA-512}(R \parallel P \parallel M)$$
+
+Because cryptographic hashes are deterministic, if the message $M$ is perfectly intact, the receiver's $h$ will be byte-for-byte identical to the one produced during signing.
+
+**Step 2 — The Verification Equation**
+
+The receiver plugs everything into a single elliptic curve equation and checks whether both sides balance:
+
+$$S \cdot G \stackrel{?}{=} R + h \cdot P$$
+
+If the left side equals the right side, the signature is valid. That's it.
+
+**Step 3 — Why the Math Always Balances (The Proof)**
+
+To see why a valid signature always satisfies this equation, we substitute what we know about $S$ from the signing phase ($S = r + h \cdot a$) into the left side:
+
+$$(r + h \cdot a) \cdot G$$
+
+Distributing $G$ across both terms:
+
+$$r \cdot G + h \cdot a \cdot G$$
+
+Now we recognise both terms:
+
+- $r \cdot G$ is exactly how the commitment point $R$ was calculated.
+- $a \cdot G$ is exactly how Alice's public key $P$ was calculated.
+
+Substituting back:
+
+$$R + h \cdot P$$
+
+The expanded left side algebraically transforms into the exact right side of the receiver's equation. The math always balances for a genuine signature.
+
+**How This Traps a Hacker**
+
+This equation is a cryptographic mousetrap. If a hacker (Mallory) tries to tamper with the data in transit, she runs into two impossible walls:
+
+- **If she alters the message ($M$):** When the receiver runs Step 1, the tampered message causes SHA-512 to produce a completely different challenge number $h$. Plugging this wrong $h$ into the right side of the equation ($R + h \cdot P$) will no longer match the left side ($S \cdot G$). Verification fails immediately.
+
+- **If she tries to forge the signature ($S$):** To make both sides of the equation balance, Mallory needs to calculate $S = r + h \cdot a$. But $a$ is Alice's private key. Because the ECDLP trapdoor makes it computationally infeasible to derive $a$ from the public key $P = a \cdot G$, she cannot produce a valid $S$. Verification fails.
+
+By using this algebraic check, Ed25519 completely eliminates the slow encryption/decryption cycles of older RSA-based signature schemes while providing rock-solid, mathematically provable tamper detection.
 
 ---
 
@@ -226,60 +309,85 @@ Here is the exact chronological walkthrough of encrypting `"Hello"`.
 
 ### Phase 1: Key Exchange & Authentication (X25519 + Ed25519)
 
-1. **Identity**: Alice and Bob have already exchanged their permanent 32-byte Ed25519 Public Keys.
-2. **Keypair Generation**: Alice generates a fresh X25519 private key and derives her 32-byte public key `A`.
-3. **Signing**: Alice uses her Ed25519 private key to digitally sign `A`. She sends `(A, Alice_Signature)`.
-4. **Verification**: Bob receives the payload. He uses Alice's known Ed25519 Public Key to verify the signature over `A`. It passes.
-5. **Response**: Bob generates his own X25519 public key `B`, signs it with his Ed25519 private key, and sends `(B, Bob_Signature)`.
-6. **Verification**: Alice verifies Bob's signature.
+1. **Session Start**: Alice and Bob both generate ephemeral Ed25519 keypairs and X25519 keypairs. 
+2. **Client Hello**: Alice signs her ephemeral X25519 public key `A` with her Ed25519 private key. She sends her Ed25519 public key, `A`, and the signature to Bob.
+3. **Server Verification**: Bob receives the payload. He uses Alice's Ed25519 public key to verify the signature over `A`. (This proves no tampering in transit, but not identity yet).
+4. **Server Hello**: Bob signs his X25519 public key `B` with his Ed25519 private key, and sends his Ed25519 public key, `B`, and the signature to Alice.
+5. **Client Identity Verification**: Alice receives Bob's payload and verifies the signature over `B`.
+6. **SAS Verification (First Use)**: If this is the first time communicating, Alice and Bob verify a Short Authentication String (SAS) out-of-band to prevent MITM attacks and establish trust (TOFU) for the Ed25519 public keys.
 
-> **From [pipeline.py](src/communication/pipeline.py) & [key_exchange.py](src/crypto/key_exchange.py):**
+> **From [client.py](src/communication/client.py) & [server.py](src/communication/server.py):**
 > ```python
-> # --- Alice (Sender) ---
+> # --- Alice (Client: client.py) ---
 > ecdh = EcdhKeyExchange()
 > senderPrivate, senderPublic = ecdh.generateKeypair()
 > senderPublicBytes = ecdh.serializePublicKey(senderPublic)
 > senderSignature = signPayload(senderPublicBytes, senderEd25519Private)
-> pipeConn.send((senderPublicBytes, senderSignature))
 > 
-> # --- Bob (Receiver) ---
-> senderPublicBytes, senderSignature = pipeConn.recv()
+> sendFramed(conn, senderEd25519PublicPemBytes)  # Ed25519 identity key
+> sendFramed(conn, senderPublicBytes)             # X25519 public key
+> sendFramed(conn, senderSignature)               # Ed25519 signature over X25519 key
+> 
+> # --- Bob (Server: server.py) ---
+> receiverEd25519Private, receiverEd25519Public = generateKeypair()
+> 
+> # ... receives Alice's data ...
+> senderEd25519Public = deserializePublicKey(senderEd25519PublicPemBytes)
 > verifySignature(senderPublicBytes, senderSignature, senderEd25519Public)
 > 
-> ecdh = EcdhKeyExchange()
-> receiverPrivate, receiverPublic = ecdh.generateKeypair()
 > receiverPublicBytes = ecdh.serializePublicKey(receiverPublic)
-> receiverSignature = signPayload(receiverPublicBytes, receiverEd25519Private)
-> pipeConn.send((receiverPublicBytes, receiverSignature))
+> receiverSignature   = signPayload(receiverPublicBytes, receiverEd25519Private)
 > 
-> # --- Alice (Sender) ---
-> receiverPublicBytes, receiverSignature = pipeConn.recv()
+> sendFramed(conn, serializePublicKey(receiverEd25519Public))
+> sendFramed(conn, receiverPublicBytes)
+> sendFramed(conn, receiverSignature)
+> 
+> # --- Alice (Client) verifies Bob's response ---
+> receiverEd25519PublicPemBytes = recvFramed(conn)
+> receiverPublicBytes           = recvFramed(conn)
+> receiverSignature             = recvFramed(conn)
+> 
+> receiverEd25519Public = deserializePublicKey(receiverEd25519PublicPemBytes)
 > verifySignature(receiverPublicBytes, receiverSignature, receiverEd25519Public)
 > ```
 
-### Phase 2: Shared Key Derivation
+### Phase 2: Shared Key Derivation & Trust Establishment
 
-Alice and Bob perform the ECDH scalar multiplication:
-- Alice multiplies Bob's public key `B` by her private key `a`.
-- Bob multiplies Alice's public key `A` by his private key `b`.
+1. **Scalar Multiplication**: Alice and Bob perform the ECDH scalar multiplication:
+   - Alice multiplies Bob's public key `B` by her private key `a`.
+   - Bob multiplies Alice's public key `A` by his private key `b`.
 
-They both arrive at the exact same 32-byte shared secret. They pass this secret through HKDF-SHA256 to derive the symmetric `sharedKey`.
+   They both arrive at the exact same 32-byte shared secret. However, because elliptic curve coordinates are not perfectly uniform, random data (they contain mathematical structure and bias), this raw secret is never used directly as an encryption key.
 
-> **From [pipeline.py](src/communication/pipeline.py) & [key_exchange.py](src/crypto/key_exchange.py):**
+2. **Key Derivation**: They pass this secret through a Key Derivation Function (HKDF-SHA256). The KDF acts as a cryptographic hash, mathematically destroying the elliptic curve structure and "extracting" perfectly uniform, white-noise bytes to serve as the secure symmetric `sharedKey`.
+
+3. **SAS Verification (First Use)**: Now that the `sharedKey` is established, if this is their first time communicating, Alice and Bob verify a Short Authentication String (SAS) derived from the `sharedKey` out-of-band. This mathematically prevents MITM attacks. Once verified, they establish trust (TOFU) for the Ed25519 public keys.
+
+> **From [client.py](src/communication/client.py) & [key_exchange.py](src/crypto/key_exchange.py):**
 > ```python
-> # --- Alice (Sender) ---
+> # --- Alice (Client) ---
 > receiverPublic = ecdh.deserializePublicKey(receiverPublicBytes)
 > sharedKey = ecdh.deriveSharedKey(senderPrivate, receiverPublic)
 > 
-> # --- Bob (Receiver) ---
+> # --- Bob (Server) ---
 > senderPublic = ecdh.deserializePublicKey(senderPublicBytes)
 > sharedKey = ecdh.deriveSharedKey(receiverPrivate, senderPublic)
 > 
 > # --- Under the hood (key_exchange.py) ---
 > def deriveSharedKey(self, ownPrivate, otherPublic):
 >     sharedSecret = ownPrivate.exchange(otherPublic)
->     hkdf = HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=b"otp-stream-cipher-v1")
+>     hkdf = HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=b"assp-stream-cipher-v1")
 >     return hkdf.derive(sharedSecret)
+> 
+> # --- MITM Protection (SAS & In-Memory Caching) ---
+> receiverFingerprint = computeFingerprint(receiverEd25519Public)
+> if isTrusted(receiverFingerprint):
+>     pass # Already verified this session
+> else:
+>     sasWords = deriveSas(sharedKey)
+>     if not askUserToVerify(sasWords):
+>         raise Exception("User rejected SAS verification.")
+>     saveKnownServer(receiverFingerprint)
 > ```
 
 ### Phase 3: Seed Encapsulation (AES-256-GCM)
@@ -289,26 +397,26 @@ They both arrive at the exact same 32-byte shared secret. They pass this secret 
 3. **Transmission**: Alice sends the `gcmNonce`, the encrypted `Seed` vault (which inherently includes the 16-byte GCM authentication tag), and the public 16-byte `csprngNonce` to Bob.
 4. **Decryption & Integrity**: Bob receives the payload and extracts the `gcmNonce`, the encrypted `Seed` vault, and the `csprngNonce`. He decrypts the vault with AES-256-GCM. GCM validates the tag internally. If the encrypted seed was altered by a MITM, GCM rejects it. Bob recovers the 32-byte `Seed` and has the `csprngNonce` ready.
 
-> **From [pipeline.py](src/communication/pipeline.py) & [seed_encryption.py](src/crypto/seed_encryption.py):**
+> **From [client.py](src/communication/client.py) & [seed_encryption.py](src/crypto/seed_encryption.py):**
 > ```python
-> # --- Alice (Sender) ---
+> # --- Alice (Client) ---
 > seedBytes = os.urandom(32)
-> gcmNonce, encryptedSeed = encryptSeed(seedBytes, sharedKey) # Uses AESGCM(sharedKey).encrypt()
+> gcmNonce, encryptedSeed = encryptSeed(seedBytes, sharedKey)
 > 
 > csprng = CsprngGenerator(seedBytes)
 > csprngNonce = csprng.getNonce()
 > 
 > # Vault contains: GCM nonce (12B) + Encrypted Seed with Tag (48B) + CSPRNG nonce (16B)
 > vault = gcmNonce + encryptedSeed + csprngNonce
-> pipeConn.send(vault)
+> sendFramed(conn, vault)   # length-prefixed TCP frame
 > 
-> # --- Bob (Receiver) ---
-> vault = pipeConn.recv()
-> gcmNonce = vault[:12]
+> # --- Bob (Server) ---
+> vault = recvFramed(conn)
+> gcmNonce      = vault[:12]
 > encryptedSeed = vault[12:60]
-> csprngNonce = vault[60:]
+> csprngNonce   = vault[60:]
 > 
-> seedBytes = decryptSeed(gcmNonce, encryptedSeed, sharedKey) # Uses AESGCM(sharedKey).decrypt()
+> seedBytes = decryptSeed(gcmNonce, encryptedSeed, sharedKey)
 > ```
 
 
@@ -316,7 +424,7 @@ They both arrive at the exact same 32-byte shared secret. They pass this secret 
 
 Alice and Bob both instantiate their CSPRNG (AES-CTR) using the 32-byte `Seed` as the encryption key and the 16-byte `csprngNonce` as the initialization vector (IV). Because they have the same key and nonce, their AES engines will produce the identical sequence of pseudo-random bytes when encrypting a stream of null bytes.
 
-> **From [pipeline.py](src/communication/pipeline.py) & [csprng.py](src/crypto/csprng.py):**
+> **From [client.py](src/communication/client.py) / [server.py](src/communication/server.py) & [csprng.py](src/crypto/csprng.py):**
 > ```python
 > # --- Alice (Sender) ---
 > # Nonce is generated internally if not provided: self.nonce = os.urandom(16)
@@ -355,13 +463,14 @@ This repeats for every byte. The CSPRNG state advances identically on both machi
 > **From [stream_cipher.py](src/crypto/stream_cipher.py):**
 > ```python
 > # --- Alice (Sender) ---
-> def encrypt(self, plaintext):
->     plaintextBytes = plaintext.encode("utf-8")
+> def encryptStream(self, data):
 >     # ... split into chunks ...
->     for byteVal in chunk:
->         keyByte = self.csprng.getNextByte() # AES-CTR generates keystream byte
->         cipherByte = byteVal ^ keyByte      # XOR encryption
->         cipherBytes.append(cipherByte)
+>     for chunk in self._splitIntoChunks(data):
+>         cipherBytes = []
+>         for byteVal in chunk:
+>             keyByte = self.csprng.getNextByte() # AES-CTR generates keystream byte
+>             cipherBytes.append(byteVal ^ keyByte) # XOR encryption
+>         # yield chunk...
 > 
 > # --- Bob (Receiver) ---
 > def decrypt(self, cipherChunks):
@@ -371,30 +480,42 @@ This repeats for every byte. The CSPRNG state advances identically on both machi
 >             keyByte = self.csprng.getNextByte() # AES-CTR generates identical keystream byte
 >             plainByte = cipherByte ^ keyByte    # XOR decryption
 >             allBytes.append(plainByte)
->     return allBytes.decode("utf-8")
+>     return bytes(allBytes)  # raw bytes; caller handles encoding (e.g. .decode("utf-8"))
 > ```
 
 ### Phase 6: Real-Time UI Synchronization
 
-Alice and Bob run in isolated Python subprocesses using `multiprocessing.Process`. They communicate internally over a `multiprocessing.Pipe()`, simulating a network boundary. To display the transmission in the brutalist terminal UI, the `pipeline.py` script aggregates the results and pushes them to a `multiprocessing.Queue`.
+The system runs as two standalone processes — the **server** (receiver, `server.py`) and the **GUI client** (sender, `main.py`). They communicate over a real TCP socket.
 
-As Alice encrypts the text, she breaks it down into chunks and sends them across the pipe. Once the transmission is complete, both processes put their final `cipherChunks` and `decryptedText` into the `resultQueue`. The PyWebView frontend Bridge (`main.py`) retrieves this data to render the UI. Every chunk shown on screen actually traveled through the entire X25519/AES-GCM/XOR pipeline across this process boundary.
+**Server side:** `runServer()` in `server.py` listens on a TCP port in a loop. For each incoming connection it runs the full handshake, decrypts the message, and renders the result in a **Textual TUI** (default) or a structured ANSI terminal readout (`--no-tui` flag) via `terminal_ui.py`.
 
-> **From [pipeline.py](src/communication/pipeline.py) & [main.py](main.py):**
+**Client side:** The PyWebView desktop window hosts the `ApiBridge` class in `main.py`. When the user clicks **Encrypt & Transmit**, `ApiBridge.runTransmission()` calls `runClient()` from `client.py`, which opens a TCP socket to the server, performs the full cryptographic handshake, sends the encrypted chunks, and returns a result dict. `ApiBridge` then formats the chunks and pushes them to the PyWebView frontend, where `app.js` renders them in the Ciphertext Stream panel.
+
+Every chunk shown on screen actually traveled through the entire X25519/AES-GCM/XOR pipeline across a real TCP socket boundary.
+
+---
+
+## End-to-End Protocol Diagram
+
+The diagram below traces the exact journey described above — from Alice's first thought ("I want to send a message") to Bob recovering the plaintext. Every arrow is a real operation in the codebase.
+
+<p align="center">
+  <img src="docs/protocol_diagram.png" alt="Protocol Sequence Diagram" width="100%">
+</p>
+
+> **From [client.py](src/communication/client.py) & [main.py](main.py):**
 > ```python
-> # --- Multiprocessing Setup (pipeline.py) ---
-> parentConn, childConn = multiprocessing.Pipe()
-> resultQueue = multiprocessing.Queue()
+> # --- TCP framing protocol (both sides) ---
+> # Every message is a length-prefixed frame: 4-byte big-endian uint32 + payload
+> sendFramed(conn, data)    # struct.pack(">I", len(data)) + conn.sendall(...)
+> chunk = recvFramed(conn)  # reads 4-byte header, then exactly that many bytes
 > 
-> sender = multiprocessing.Process(target=senderProcess, args=(parentConn, ...))
-> receiver = multiprocessing.Process(target=receiverProcess, args=(childConn, ...))
-> 
-> # --- Inter-process Transmission (pipeline.py) ---
+> # --- Chunk transmission (client.py) ---
 > for chunk in cipherChunks:
->     pipeConn.send(chunk) # Sender passes encrypted chunks over the boundary
-> pipeConn.send("__END__")
+>     sendFramed(conn, chunk.encode("utf-8"))
+> sendFramed(conn, b"__END__")   # sentinel signals end of stream
 > 
-> # --- UI Synchronization (main.py) ---
-> # The PyWebView API Bridge initiates and collects the results
-> result = runCommunication(plaintext, self.config)
+> # --- UI bridge (main.py) ---
+> result = runClient(plaintext, {"type": "text"}, self.config, host, int(port))
+> # result = {"cipherChunks": [...], "success": True}
 > ```

@@ -1,6 +1,11 @@
 {
   "crypto": {
-    "aesKeyLength": 256,
     "maxChunkSize": 10
+  },
+  "network": {
+    "timeoutSeconds": 30
+  },
+  "security": {
+    "skipSasVerification": false
   }
 }

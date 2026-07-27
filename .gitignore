@@ -14,7 +14,9 @@ __pycache__/
 build/
 develop-eggs/
 dist/
-downloads/
+# Runtime output — received files (keep directory, ignore contents)
+downloads/*
+!downloads/.gitkeep
 eggs/
 .eggs/
 lib/
@@ -185,3 +187,13 @@ cython_debug/
 
 #graphify
 graphify-out/
+
+# Ed25519 identity keys — private key must never be committed
+keys/*private*.pem
+
+# LaTeX build artifacts in docs/
+docs/*.aux
+docs/*.fls
+docs/*.fdb_latexmk
+docs/*.log
+docs/*.synctex.gz

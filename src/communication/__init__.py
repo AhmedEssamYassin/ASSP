@@ -1,1 +1,1 @@
-"""Communication package for multiprocessing pipelines."""
+"""Communication package for TCP client/server transport."""

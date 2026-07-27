@@ -1,135 +1,400 @@
 <!DOCTYPE html>
-<html lang="en">
-
+<html class="dark" lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OTP Stream Cipher // Terminal</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap"
-        rel="stylesheet">
-    <link rel="stylesheet" href="styles.css">
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>ASSP Security Dashboard - Transmit</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&amp;family=Public+Sans:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "outline": "#757578",
+                        "surface-container-highest": "#252628",
+                        "surface-container-high": "#1f2021",
+                        "on-surface": "#e6e5e7",
+                        "primary-container": "#404753",
+                        "surface-variant": "#252628",
+                        "secondary": "#9c9ea4",
+                        "secondary-dim": "#9c9ea4",
+                        "surface": "#0e0e0f",
+                        "secondary-container": "#393b40",
+                        "outline-variant": "#47484a",
+                        "on-surface-variant": "#ababad",
+                        "on-secondary": "#1d2025",
+                        "on-error": "#490106",
+                        "on-tertiary": "#545771",
+                        "tertiary-dim": "#cecfef",
+                        "on-secondary-container": "#bdbfc5",
+                        "inverse-primary": "#585f6c",
+                        "tertiary-fixed": "#dcddfe",
+                        "tertiary": "#edecff",
+                        "on-secondary-fixed": "#3d3f44",
+                        "primary-fixed": "#dbe3f1",
+                        "surface-container-low": "#131314",
+                        "inverse-surface": "#fcf8f9",
+                        "background": "#0e0e0f",
+                        "error-dim": "#bb5551",
+                        "tertiary-fixed-dim": "#cecfef",
+                        "on-primary-fixed": "#38404b",
+                        "tertiary-container": "#dcddfe",
+                        "secondary-fixed-dim": "#d3d4da",
+                        "on-primary-container": "#c9d1df",
+                        "on-primary-fixed-variant": "#545c68",
+                        "surface-dim": "#0e0e0f",
+                        "surface-container-lowest": "#000000",
+                        "on-secondary-fixed-variant": "#595b61",
+                        "surface-container": "#19191b",
+                        "on-primary": "#39414c",
+                        "error": "#ee7d77",
+                        "surface-tint": "#bfc7d5",
+                        "primary": "#bfc7d5",
+                        "on-background": "#e6e5e7",
+                        "on-error-container": "#ff9993",
+                        "inverse-on-surface": "#565555",
+                        "error-container": "#7f2927",
+                        "primary-dim": "#b2b9c7",
+                        "secondary-fixed": "#e1e2e8",
+                        "on-tertiary-fixed-variant": "#555873",
+                        "on-tertiary-container": "#4b4e69",
+                        "surface-bright": "#2b2c2f",
+                        "primary-fixed-dim": "#cdd5e3",
+                        "on-tertiary-fixed": "#393c55"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "fontFamily": {
+                        "headline": ["Inter"],
+                        "display": ["Inter"],
+                        "body": ["Inter"],
+                        "label": ["Public Sans"],
+                        "mono": ["JetBrains Mono"]
+                    }
+                },
+            },
+        }
+    </script>
+    <style>
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: #0e0e0f; }
+        ::-webkit-scrollbar-thumb { background: #47484a; border-radius: 2px; }
+        ::-webkit-scrollbar-thumb:hover { background: #757578; }
+        .hidden { display: none !important; }
+        
+        /* App.js dynamically injected element styling */
+        .log-entry { padding: 4px 0; border-bottom: 1px solid #252628; display: flex; gap: 8px; }
+        .log-entry.info { color: #bfc7d5; }
+        .log-entry.success { color: #55b583; }
+        .log-entry.error { color: #ee7d77; }
+        .log-entry .ts { color: #757578; font-family: 'JetBrains Mono', monospace; }
+
+        .chunk-row { display: table-row; }
+        .chunk-row > span { display: table-cell; padding: 8px 12px; border-bottom: 1px solid #252628; }
+        .chunk-idx { color: #757578; }
+        .chunk-plain { color: #e6e5e7; }
+        .chunk-cipher { color: #bfc7d5; font-size: 0.9em; }
+
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background-color: #757578;}
+        .status-dot.active { background-color: #55b583; box-shadow: 0 0 8px #55b583; }
+        .status-dot.transmitting { background-color: #f5a623; animation: pulse 1s infinite; }
+        .status-dot.error { background-color: #ee7d77; box-shadow: 0 0 8px #ee7d77; }
+        
+        .status-badge { padding: 2px 6px; border-radius: 4px; font-size: 10px; text-transform: uppercase; }
+        .status-badge.success { background: rgba(85, 181, 131, 0.2); color: #55b583; }
+        .status-badge.failed { background: rgba(238, 125, 119, 0.2); color: #ee7d77; }
+    </style>
 </head>
+<body class="bg-background text-on-surface font-body selection:bg-primary-container selection:text-on-primary-container m-0 p-0 overflow-hidden">
 
-<body>
-    <div class="terminal-frame">
-        <header class="terminal-header">
-            <div class="header-left">
-                <span class="blink">■</span>
-                <span>OTP_STREAM_CIPHER v1.0.0 // SECURE TRANSMISSION TERMINAL</span>
+<aside class="h-screen w-[250px] fixed left-0 top-0 bg-surface-container-low border-r border-outline-variant flex flex-col z-40">
+    <div class="p-6 border-b border-outline-variant">
+        <div class="flex items-center justify-between mb-1">
+            <span class="font-headline font-bold text-on-surface text-lg uppercase tracking-widest">ASSP</span>
+            <span class="bg-surface-container-highest text-on-surface-variant text-[10px] px-2 py-0.5 rounded font-mono border border-outline-variant">v1.0.0</span>
+        </div>
+        <p class="text-[10px] text-on-surface-variant uppercase tracking-tighter">Authenticated Secure Stream</p>
+    </div>
+    
+    <nav class="flex-1 py-4 overflow-y-auto">
+        <div class="px-3 mb-6 flex flex-col gap-1">
+            <a href="#" id="navTransmit" onclick="switchTab('transmit'); return false;" class="flex items-center gap-3 px-3 py-2.5 rounded bg-surface-container-high border-r-2 border-primary text-primary font-bold cursor-pointer group transition-colors duration-150 active">
+                <span class="material-symbols-outlined text-xl">send</span>
+                <span class="text-label-md tracking-tight">Transmit</span>
+            </a>
+            <a href="#" id="navMonitor" onclick="switchTab('monitor'); return false;" class="flex items-center gap-3 px-3 py-2.5 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors duration-150 cursor-pointer">
+                <span class="material-symbols-outlined text-xl">monitoring</span>
+                <span class="text-label-md tracking-tight">Monitor</span>
+            </a>
+        </div>
+        
+        <div class="px-6 py-4">
+            <h3 class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-3">Protocol Stack</h3>
+            <div class="space-y-3 font-mono text-[10px]">
+                <div class="flex flex-col border-l border-outline-variant pl-3">
+                    <span class="text-outline uppercase text-[9px]">Cipher</span>
+                    <span class="text-on-surface">AES-256-CTR</span>
+                </div>
+                <div class="flex flex-col border-l border-outline-variant pl-3">
+                    <span class="text-outline uppercase text-[9px]">Kex</span>
+                    <span class="text-on-surface">X25519 ECDH</span>
+                </div>
+                <div class="flex flex-col border-l border-outline-variant pl-3">
+                    <span class="text-outline uppercase text-[9px]">Auth</span>
+                    <span class="text-on-surface">Ed25519</span>
+                </div>
+                <div class="flex flex-col border-l border-outline-variant pl-3">
+                    <span class="text-outline uppercase text-[9px]">Kdf</span>
+                    <span class="text-on-surface">HKDF-SHA256</span>
+                </div>
+                <div class="flex flex-col border-l border-outline-variant pl-3">
+                    <span class="text-outline uppercase text-[9px]">Seed</span>
+                    <span class="text-on-surface">AES-256-GCM</span>
+                </div>
             </div>
-            <div class="header-right">
-                <span class="status-dot"></span>
-                <span class="status-text">STANDBY</span>
-            </div>
-        </header>
+        </div>
+    </nav>
+    
+    <div class="p-4 border-t border-outline-variant bg-surface-container-lowest">
+        <div class="flex items-center gap-2 mb-2">
+            <div id="statusDot" class="status-dot"></div>
+            <span id="statusText" class="text-[11px] text-on-surface-variant">Standby</span>
+        </div>
+        <div class="text-[10px] font-mono text-outline uppercase tracking-tighter" id="timestamp"></div>
+    </div>
+</aside>
 
-        <div class="system-bar">
-            <div class="sys-item">CSPRNG: AES-256-CTR</div>
-            <div class="sys-item">KEX: X25519 ECDH</div>
-            <div class="sys-item">SIG: ED25519 EdDSA</div>
-            <div class="sys-item">KDF: HKDF-SHA256</div>
-            <div class="sys-item">SEED: AES-256-GCM</div>
-            <div class="sys-item">CHUNK: 10 BYTES</div>
+<main class="ml-[250px] p-8 h-screen flex flex-col">
+    <!-- Transmit Workspace -->
+    <div id="workspaceTransmit" class="flex-1 flex flex-col min-h-0">
+        <div class="mb-8 flex-none">
+            <h2 class="text-2xl font-headline font-bold text-on-surface tracking-tight">Secure Transmission</h2>
+            <p class="text-on-surface-variant text-sm mt-1 max-w-2xl">End-to-end encrypted using authenticated secure stream protocol over TCP.</p>
         </div>
 
-        <main class="main-grid">
-            <section class="module module-sender">
-                <div class="module-header">
-                    <span class="module-label">[SENDER]</span>
-                    <span class="module-id">TX-01</span>
+        <div class="flex-1 grid grid-cols-12 gap-6 items-stretch min-h-0">
+            <!-- Compose Panel -->
+            <div class="col-span-12 lg:col-span-7 bg-surface-container border border-outline-variant rounded p-6 shadow-sm flex flex-col min-h-0">
+                <div class="flex items-center gap-2 mb-6 border-b border-outline-variant pb-4 flex-none">
+                    <span class="material-symbols-outlined text-primary">edit_note</span>
+                    <h3 class="font-headline font-bold text-sm uppercase tracking-wider">Compose Session</h3>
                 </div>
-                <div class="module-body">
-                    <div class="sender-watermark">[ WAITING FOR TX ]</div>
-                    <div class="field-group">
-                        <label for="plaintext">> PLAINTEXT_INPUT</label>
-                        <textarea id="plaintext" rows="4"
-                            spellcheck="false">Hello World! This is a secure message.</textarea>
+                
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div class="space-y-1.5">
+                        <label class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest ml-1">Target Host IP</label>
+                        <input id="serverIp" class="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm font-mono focus:ring-1 focus:ring-primary focus:border-primary outline-none text-on-surface" type="text" value="127.0.0.1" spellcheck="false"/>
                     </div>
-                    <button id="transmitBtn" onclick="startTransmission()">
-                        <span class="btn-label">[ EXECUTE TRANSMISSION ]</span>
-                        <span class="btn-loader" style="display: none;">
-                            <span class="loading-dots">
-                                <span class="dot"></span>
-                                <span class="dot"></span>
-                                <span class="dot"></span>
-                            </span>
+                    <div class="space-y-1.5">
+                        <label class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest ml-1">Port</label>
+                        <input id="serverPort" class="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm font-mono focus:ring-1 focus:ring-primary focus:border-primary outline-none text-on-surface" type="text" value="5000" spellcheck="false"/>
+                    </div>
+                </div>
+                
+                <div class="flex-1 flex flex-col space-y-1.5 mb-2 min-h-0">
+                    <label class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest ml-1 flex-none">Plaintext Message</label>
+                    <textarea id="plaintext" class="flex-1 w-full bg-surface-container-low border border-outline-variant rounded px-4 py-3 text-sm font-mono focus:ring-1 focus:ring-primary focus:border-primary outline-none text-on-surface resize-none placeholder:text-outline" placeholder="Enter the message to encrypt and transmit..." spellcheck="false">Hello World! This is a secure message.</textarea>
+                </div>
+                <div class="flex justify-end mb-6 flex-none">
+                    <div id="charCount" class="text-xs text-on-surface-variant">38 chars</div>
+                </div>
+                
+                <div class="flex items-center gap-3 flex-none">
+                    <button id="transmitBtn" onclick="startTransmission()" class="bg-primary text-on-primary font-headline font-bold py-2.5 px-6 rounded text-sm hover:brightness-110 active:opacity-80 transition-all flex items-center gap-2">
+                        <span class="btn-label flex items-center gap-2">
+                            <span class="material-symbols-outlined text-lg" style="font-variation-settings: 'FILL' 1;">send</span>
+                            Encrypt &amp; Send
                         </span>
+                        <div class="btn-loader hidden">Wait...</div>
+                    </button>
+                    <button id="sendFileBtn" onclick="startFileTransmission()" class="bg-surface-container-high border border-outline-variant text-on-surface-variant font-headline font-medium py-2.5 px-6 rounded text-sm hover:bg-surface-variant hover:text-on-surface transition-all flex items-center gap-2">
+                        <span class="material-symbols-outlined text-lg">upload_file</span>
+                        Upload File
                     </button>
                 </div>
-            </section>
-
-            <section class="module module-pipe">
-                <div class="module-header">
-                    <span class="module-label">[DATA PIPE]</span>
-                    <span class="module-id">CH-00</span>
-                </div>
-                <div class="module-body">
-                    <div id="pipeVisualizer" class="pipe-visualizer">
-                        <div class="pipe-empty">
-                            <span class="pipe-text">AWAITING TRANSMISSION...</span>
-                        </div>
-                    </div>
-                    <div id="chunkDisplay" class="chunk-display hidden">
-                        <div class="chunk-header">
-                            <span>INDEX</span>
-                            <span>PLAINTEXT</span>
-                            <span>CIPHERTEXT</span>
-                        </div>
-                        <div id="chunkRows" class="chunk-rows"></div>
-                    </div>
-                </div>
-            </section>
-
-            <section class="module module-receiver">
-                <div class="module-header">
-                    <span class="module-label">[RECEIVER]</span>
-                    <span class="module-id">RX-01</span>
-                </div>
-                <div class="module-body">
-                    <div id="receiverOutput" class="receiver-output">
-                        <div class="output-empty">
-                            <span class="output-text">NO DATA RECEIVED</span>
-                        </div>
-                    </div>
-                    <div id="decryptedDisplay" class="decrypted-display hidden">
-                        <div class="decrypted-label">> DECRYPTED_OUTPUT</div>
-                        <div id="decryptedText" class="decrypted-text"></div>
-                    </div>
-                    <div id="verificationDisplay" class="verification-display hidden">
-                        <div id="verificationResult" class="verification-result"></div>
-                    </div>
-                </div>
-            </section>
-        </main>
-
-        <section class="module log-module">
-            <div class="module-header">
-                <span class="module-label">[SYSTEM LOG]</span>
-                <span class="module-id">LOG</span>
             </div>
-            <div class="module-body">
-                <div class="log-grid">
-                    <div class="log-panel">
-                        <div class="log-panel-header">> TX_LOG</div>
-                        <div id="txLogs" class="log-entries"></div>
+
+            <!-- Transmission Log -->
+            <div class="col-span-12 lg:col-span-5 flex flex-col gap-6 min-h-0">
+                <!-- Log Panel -->
+                <div class="flex-1 bg-surface-container border border-outline-variant rounded overflow-hidden flex flex-col min-h-0">
+                    <div class="flex items-center justify-between px-4 py-3 bg-surface-container-high border-b border-outline-variant flex-none">
+                        <div class="flex items-center gap-2">
+                            <span class="material-symbols-outlined text-primary text-base">list_alt</span>
+                            <span class="text-[10px] font-bold uppercase tracking-wider">Transmission Log</span>
+                        </div>
                     </div>
-                    <div class="log-panel">
-                        <div class="log-panel-header">> RX_LOG</div>
-                        <div id="rxLogs" class="log-entries"></div>
+                    <div id="txLogs" class="p-4 flex flex-col space-y-2 flex-1 overflow-y-auto text-xs font-mono">
+                        <div class="log-empty text-on-surface-variant italic text-center py-8 flex-none">No transmission yet.</div>
+                    </div>
+                </div>
+
+                <!-- Ciphertext Stream Panel -->
+                <div class="flex-1 bg-surface-container border border-outline-variant rounded flex flex-col min-h-0">
+                    <div class="flex items-center justify-between px-4 py-3 bg-surface-container-high border-b border-outline-variant">
+                        <div class="flex items-center gap-2">
+                            <span class="material-symbols-outlined text-primary text-base">stream</span>
+                            <span class="text-[10px] font-bold uppercase tracking-wider">Ciphertext Stream</span>
+                        </div>
+                        <div id="streamCounter" class="text-xs text-on-surface-variant hidden">
+                            <span id="chunkCount">0</span> frames
+                        </div>
+                    </div>
+                    
+                    <div class="flex-1 relative overflow-hidden bg-surface-container-lowest">
+                        <!-- File Pipeline -->
+                        <div id="filePipeline" class="hidden p-4 h-full overflow-y-auto">
+                            <div class="flex items-center justify-between mb-4 border-b border-outline-variant pb-2">
+                                <div class="flex items-center gap-2 text-sm">
+                                    <span class="material-symbols-outlined text-primary">description</span>
+                                    <span id="fpFilename" class="text-on-surface truncate max-w-[150px]">—</span>
+                                    <span id="fpFilesize" class="text-outline">—</span>
+                                </div>
+                                <div id="fpTimer" class="font-mono text-outline text-xs">0.0s</div>
+                            </div>
+                            <div class="space-y-2 text-xs font-mono">
+                                <div id="fps-file" class="flex justify-between text-outline"><span id="fpd-file">File Selected</span></div>
+                                <div id="fps-read" class="flex justify-between text-outline"><span>Reading Binary</span><span id="fpd-read">Waiting...</span></div>
+                                <div id="fps-handshake" class="flex justify-between text-outline"><span>X25519 KEX</span><span id="fpd-handshake">Waiting...</span></div>
+                                <div id="fps-encrypt" class="flex justify-between text-outline">
+                                    <span>Encrypting</span><span id="fpd-encrypt">Waiting...</span>
+                                </div>
+                                <div id="fpb-encrypt" class="hidden w-full h-1 bg-surface-variant mt-1 rounded"><div id="fpbf-encrypt" class="h-full bg-primary w-0 rounded transition-all"></div></div>
+                                <div id="fps-transmit" class="flex justify-between text-outline">
+                                    <span>Transmitting</span><span id="fpd-transmit">Waiting...</span>
+                                </div>
+                                <div id="fpb-transmit" class="hidden w-full h-1 bg-surface-variant mt-1 rounded"><div id="fpbf-transmit" class="h-full bg-primary w-0 rounded transition-all"></div></div>
+                            </div>
+                            <div id="fpResult" class="hidden mt-4 pt-2 border-t border-outline-variant text-center">
+                                <span id="fpResultIcon" class="text-primary mr-2">✓</span>
+                                <span id="fpResultText" class="text-sm">Complete</span>
+                                <div id="fpResultSub" class="text-xs text-outline mt-1">—</div>
+                            </div>
+                        </div>
+
+                        <!-- Idle View -->
+                        <div id="pipeVisualizer" class="h-full flex flex-col items-center justify-center p-6">
+                            <div class="absolute inset-0 opacity-[0.03]" style="background-image: radial-gradient(circle, #bfc7d5 1px, transparent 1px); background-size: 16px 16px;"></div>
+                            <span class="material-symbols-outlined text-outline text-5xl mb-4 opacity-30 animate-pulse">radar</span>
+                            <p class="text-on-surface-variant text-xs text-center max-w-[240px]">Stream is idle. Encrypted frames will appear after transmission.</p>
+                        </div>
+
+                        <!-- Table View -->
+                        <div id="chunkDisplay" class="hidden h-full overflow-y-auto">
+                            <table class="w-full text-left text-xs font-mono">
+                                <thead class="bg-surface-container-high text-outline sticky top-0">
+                                    <tr>
+                                        <th class="py-2 px-3 font-normal border-b border-outline-variant">#</th>
+                                        <th class="py-2 px-3 font-normal border-b border-outline-variant">Plaintext</th>
+                                        <th class="py-2 px-3 font-normal border-b border-outline-variant">Ciphertext (Hex)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="chunkRows" class="divide-y divide-outline-variant">
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
-        </section>
-
-        <footer class="terminal-footer">
-            <span>COMPUTER SECURITY // CAIRO UNIVERSITY</span>
-            <span id="timestamp"></span>
-        </footer>
+        </div>
     </div>
+    
+    <!-- Monitor Workspace -->
+    <div id="workspaceMonitor" class="hidden flex-1 flex-col min-h-0">
+        <div class="mb-8 flex-none">
+            <h2 class="text-2xl font-headline font-bold text-on-surface tracking-tight">System Monitor</h2>
+            <p class="text-on-surface-variant text-sm mt-1">Audit log and metrics for the authenticated secure stream protocol.</p>
+        </div>
 
-    <script src="app.js"></script>
+        <div class="grid grid-cols-3 gap-6 mb-8 flex-none">
+            <div class="bg-surface-container border border-outline-variant rounded p-6 shadow-sm flex flex-col gap-2">
+                <div class="flex items-center gap-2 text-primary">
+                    <span class="material-symbols-outlined">sync_alt</span>
+                    <h3 class="font-headline font-bold text-xs uppercase tracking-wider">Total Transmissions</h3>
+                </div>
+                <div id="statTxTotal" class="text-3xl font-mono text-on-surface">0</div>
+            </div>
+            <div class="bg-surface-container border border-outline-variant rounded p-6 shadow-sm flex flex-col gap-2">
+                <div class="flex items-center gap-2 text-primary">
+                    <span class="material-symbols-outlined">data_usage</span>
+                    <h3 class="font-headline font-bold text-xs uppercase tracking-wider">Bytes Encrypted</h3>
+                </div>
+                <div id="statBytesTotal" class="text-3xl font-mono text-on-surface">0</div>
+            </div>
+            <div class="bg-surface-container border border-outline-variant rounded p-6 shadow-sm flex flex-col gap-2">
+                <div class="flex items-center gap-2 text-error">
+                    <span class="material-symbols-outlined">error</span>
+                    <h3 class="font-headline font-bold text-xs uppercase tracking-wider text-error">Failed Transmissions</h3>
+                </div>
+                <div id="statTxFailed" class="text-3xl font-mono text-on-surface">0</div>
+            </div>
+        </div>
+
+        <div class="flex-1 bg-surface-container border border-outline-variant rounded flex flex-col min-h-0">
+            <div class="flex items-center justify-between px-6 py-4 bg-surface-container-high border-b border-outline-variant flex-none">
+                <h3 class="font-headline font-bold text-sm uppercase tracking-wider">Transmission History</h3>
+                <button onclick="loadMonitorData()" class="flex items-center gap-2 text-xs text-on-surface-variant hover:text-on-surface">
+                    <span class="material-symbols-outlined text-sm">refresh</span> Refresh
+                </button>
+            </div>
+            <div class="flex-1 overflow-auto">
+                <table class="w-full text-left text-sm">
+                    <thead class="bg-surface-container-low text-outline font-mono text-xs uppercase tracking-wider">
+                        <tr>
+                            <th class="py-3 px-6 font-medium border-b border-outline-variant">TX ID</th>
+                            <th class="py-3 px-6 font-medium border-b border-outline-variant">Timestamp</th>
+                            <th class="py-3 px-6 font-medium border-b border-outline-variant">Target Host</th>
+                            <th class="py-3 px-6 font-medium border-b border-outline-variant">Payload Size</th>
+                            <th class="py-3 px-6 font-medium border-b border-outline-variant">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyTableBody" class="divide-y divide-outline-variant text-on-surface-variant">
+                        <!-- Injected via JS -->
+                    </tbody>
+                </table>
+                <div id="historyEmpty" class="py-12 text-center text-outline text-sm italic">
+                    No transmission data available yet.
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+
+<!-- Overlay Modal: Security Verification -->
+<div id="sasModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm px-4">
+    <div class="bg-surface border border-outline-variant w-full max-w-md rounded shadow-2xl">
+        <div class="bg-surface-container-high px-6 py-4 border-b border-outline-variant flex items-center gap-3">
+            <span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">verified_user</span>
+            <h2 class="font-headline font-bold text-sm uppercase tracking-widest">Security Verification (SAS)</h2>
+        </div>
+        <div class="p-6">
+            <div class="bg-primary/10 border-l-4 border-primary p-4 mb-6">
+                <p class="text-xs leading-relaxed text-on-surface">To prevent Man-in-the-Middle attacks, please compare the following words with the receiver over an out-of-band channel.</p>
+            </div>
+            <div id="sasWords" class="text-center font-mono font-bold text-primary tracking-widest text-lg mb-8 bg-surface-container-low border border-outline-variant p-4 rounded">
+                <!-- Injected via app.js -->
+            </div>
+            <p class="text-center font-headline text-sm font-medium mb-6">Do the words match exactly?</p>
+            <div class="flex flex-col gap-3">
+                <button onclick="submitSas(true)" class="w-full bg-primary text-on-primary font-headline font-bold py-3 rounded text-sm hover:brightness-110 active:scale-[0.98] transition-all">
+                    Yes, they match
+                </button>
+                <button onclick="submitSas(false)" class="w-full bg-transparent border border-error text-error font-headline font-medium py-3 rounded text-sm hover:bg-error/10 active:scale-[0.98] transition-all">
+                    No, they differ (Abort)
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="app.js"></script>
 </body>
-
 </html>

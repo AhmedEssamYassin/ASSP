@@ -11,10 +11,14 @@ def loadConfig(configPath=None):
     if configPath is None:
         configPath = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "config", "default_config.json")
     try:
-        with open(configPath, "r") as f:
+        with open(configPath, "r", encoding="utf-8") as f:
             config = json.load(f)
         logger.info("Configuration loaded from %s", configPath)
         return config
     except Exception as e:
         logger.critical("FATAL: Could not load config from %s: %s", configPath, e)
         raise SystemExit(f"Failed to load config: {e}")
+
+def getNetworkTimeout(config, default=30):
+    """Safely extract the network timeout from config."""
+    return config.get("network", {}).get("timeoutSeconds", default)

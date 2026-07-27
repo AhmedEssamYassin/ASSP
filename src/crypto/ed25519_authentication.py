@@ -1,6 +1,7 @@
 """Ed25519 digital signature module for authenticating X25519 public keys."""
 
 import logging
+import hashlib
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives import serialization
 
@@ -25,18 +26,6 @@ def deserializePublicKey(pemBytes):
     """Deserialize Ed25519 public key from PEM bytes."""
     return serialization.load_pem_public_key(pemBytes)
 
-def serializePrivateKey(privateKey):
-    """Serialize Ed25519 private key to PEM bytes."""
-    return privateKey.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.NoEncryption(),
-    )
-
-def deserializePrivateKey(pemBytes):
-    """Deserialize Ed25519 private key from PEM bytes."""
-    return serialization.load_pem_private_key(pemBytes, password=None)
-
 def signPayload(payloadBytes, privateKey):
     """Sign payload bytes using Ed25519."""
     signature = privateKey.sign(payloadBytes)
@@ -51,3 +40,12 @@ def verifySignature(payloadBytes, signature, publicKey):
     except Exception as e:
         logger.error("Ed25519 signature verification failed: %s", e)
         raise Exception("MITM detected: X25519 public key signature is invalid")
+
+def computeFingerprint(publicKey):
+    """Return a colon-separated SHA-256 fingerprint of an Ed25519 public key."""
+    rawBytes = publicKey.public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+    digest = hashlib.sha256(rawBytes).digest()
+    return ":".join(f"{b:02x}" for b in digest[:16])  # first 16 bytes = 47-char string
