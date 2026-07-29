@@ -114,13 +114,13 @@ class ApiBridge:
             else:
                 with self._metricsLock:
                     self.metrics["failed_transmissions"] += 1
-                self.history.insert(0, {
-                    "id": f"TX-{self.metrics['total_transmissions']:04d}",
-                    "timestamp": ts,
-                    "target": f"{host}:{port}",
-                    "status": "Failed",
-                    "bytes": 0
-                })
+                    self.history.insert(0, {
+                        "id": f"TX-{self.metrics['total_transmissions']:04d}",
+                        "timestamp": ts,
+                        "target": f"{host}:{port}",
+                        "status": "Failed",
+                        "bytes": 0
+                    })
                 
                 return {
                     "success": False,
@@ -131,13 +131,13 @@ class ApiBridge:
                 if not transmissionCounted:
                     self.metrics["total_transmissions"] += 1
                 self.metrics["failed_transmissions"] += 1
-            self.history.insert(0, {
-                "id": f"TX-{self.metrics['total_transmissions']:04d}",
-                "timestamp": ts,
-                "target": f"{host}:{port}",
-                "status": "Error",
-                "bytes": 0
-            })
+                self.history.insert(0, {
+                    "id": f"TX-{self.metrics['total_transmissions']:04d}",
+                    "timestamp": ts,
+                    "target": f"{host}:{port}",
+                    "status": "Error",
+                    "bytes": 0
+                })
             return {
                 "success": False,
                 "error": str(e),
@@ -207,13 +207,13 @@ class ApiBridge:
                 else:
                     with self._metricsLock:
                         self.metrics["failed_transmissions"] += 1
-                    self.history.insert(0, {
-                        "id": f"TX-{self.metrics['total_transmissions']:04d}",
-                        "timestamp": ts,
-                        "target": f"{host}:{port}",
-                        "status": "Failed",
-                        "bytes": 0
-                    })
+                        self.history.insert(0, {
+                            "id": f"TX-{self.metrics['total_transmissions']:04d}",
+                            "timestamp": ts,
+                            "target": f"{host}:{port}",
+                            "status": "Failed",
+                            "bytes": 0
+                        })
                     self._progressQueue.put({
                         "stage": "complete",
                         "success": False,
@@ -224,13 +224,13 @@ class ApiBridge:
                     if not transmissionCounted:
                         self.metrics["total_transmissions"] += 1
                     self.metrics["failed_transmissions"] += 1
-                self.history.insert(0, {
-                    "id": f"TX-{self.metrics['total_transmissions']:04d}",
-                    "timestamp": ts,
-                    "target": f"{host}:{port}",
-                    "status": "Error",
-                    "bytes": 0
-                })
+                    self.history.insert(0, {
+                        "id": f"TX-{self.metrics['total_transmissions']:04d}",
+                        "timestamp": ts,
+                        "target": f"{host}:{port}",
+                        "status": "Error",
+                        "bytes": 0
+                    })
                 self._progressQueue.put({
                     "stage": "complete",
                     "success": False,
@@ -317,13 +317,13 @@ class ApiBridge:
                 else:
                     with self._metricsLock:
                         self.metrics["failed_transmissions"] += 1
-                    self.history.insert(0, {
-                        "id": f"TX-{self.metrics['total_transmissions']:04d}",
-                        "timestamp": ts,
-                        "target": f"{host}:{port}",
-                        "status": "Failed",
-                        "bytes": 0
-                    })
+                        self.history.insert(0, {
+                            "id": f"TX-{self.metrics['total_transmissions']:04d}",
+                            "timestamp": ts,
+                            "target": f"{host}:{port}",
+                            "status": "Failed",
+                            "bytes": 0
+                        })
                     self._progressQueue.put({
                         "stage": "complete",
                         "success": False,
@@ -334,13 +334,13 @@ class ApiBridge:
                     if not transmissionCounted:
                         self.metrics["total_transmissions"] += 1
                     self.metrics["failed_transmissions"] += 1
-                self.history.insert(0, {
-                    "id": f"TX-{self.metrics['total_transmissions']:04d}",
-                    "timestamp": ts,
-                    "target": f"{host}:{port}",
-                    "status": "Error",
-                    "bytes": 0
-                })
+                    self.history.insert(0, {
+                        "id": f"TX-{self.metrics['total_transmissions']:04d}",
+                        "timestamp": ts,
+                        "target": f"{host}:{port}",
+                        "status": "Error",
+                        "bytes": 0
+                    })
                 self._progressQueue.put({
                     "stage": "complete",
                     "success": False,

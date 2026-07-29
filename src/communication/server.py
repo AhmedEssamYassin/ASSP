@@ -124,8 +124,10 @@ def handleConnection(conn, addr, config, receiverEd25519Private, callbacks):
     
     skipSas = config.get("security", {}).get("skipSasVerification", False)
     if skipSas:
+        conn.recv(1)  # drain the mandatory \x01 the client always sends
         callbacks.onStep("SAS Verification", "ok", detail="(Skipped by config)")
     elif isTrusted(senderFingerprint):
+        conn.recv(1)  # drain the mandatory \x01 the client always sends
         callbacks.onStep("SAS Verification", "ok", detail="(Cached from previous)")
     else:
         sasWords = deriveSas(sharedKey)
