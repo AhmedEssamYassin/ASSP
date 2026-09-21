@@ -73,7 +73,7 @@ If Bob needs to decrypt Alice's message, he must produce the exact same sequence
 Instead of true randomness, we use a **Cryptographically Secure Pseudorandom Number Generator (CSPRNG)**. Both sides use the AES block cipher in Counter (CTR) mode.
 
 <p align="center">
-  <img src="docs/aes_ctr_diagram.png" alt="AES CTR Mode Encryption and Decryption Diagram" width="100%">
+  <img src="docs/aes-ctr-diagram.png" alt="AES CTR Mode Encryption and Decryption Diagram" width="100%">
 </p>
 
 **How Synchronization Works:**
@@ -107,7 +107,7 @@ Alice has generated a 32-byte random Seed. Bob needs that exact Seed to synchron
 We need to encrypt the Seed before transmission. To do this, Alice uses the Advanced Encryption Standard (AES) in GCM (Galois/Counter Mode).
 
 <p align="center">
-  <img src="docs/aes_gcm_diagram.png" alt="AES-GCM Authenticated Encryption Diagram" width="100%">
+  <img src="docs/aes-gcm-diagram.png" alt="AES-GCM Authenticated Encryption Diagram" width="100%">
 </p>
 
 The Advanced Encryption Standard (AES) in GCM (Galois/Counter Mode) is the industry-standard symmetric cipher. It takes a plaintext input and a 32-byte key, and produces ciphertext that is computationally infeasible to break without that key. AES-256 specifically uses a 256-bit (32-byte) key, which gives 2²⁵⁶ possible keys — a number so astronomically large that brute-forcing it is beyond any realistic computation.
@@ -500,7 +500,7 @@ Every chunk shown on screen actually traveled through the entire X25519/AES-GCM/
 The diagram below traces the exact journey described above — from Alice's first thought ("I want to send a message") to Bob recovering the plaintext. Every arrow is a real operation in the codebase.
 
 <p align="center">
-  <img src="docs/protocol_diagram.png" alt="Protocol Sequence Diagram" width="100%">
+  <img src="docs/protocol-diagram.png" alt="Protocol Sequence Diagram" width="100%">
 </p>
 
 > **From [client.py](src/communication/client.py) & [main.py](main.py):**
